@@ -116,7 +116,7 @@ export default function Home() {
             <h1 className="text-5xl font-bold text-white mb-8">AI-Dentifier</h1>
 
             <div className="text-center text-gray-400 mb-6">
-                Using Facebook's DETR model to identify objects in your images.
+                Using Facebooks DETR model to identify objects in your images.
             </div>
 
             {/* File Upload Button */}
