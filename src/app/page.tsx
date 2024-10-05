@@ -1,101 +1,213 @@
-import Image from "next/image";
+"use client";
+import { useState, useRef, useEffect } from "react";
+
+interface IdentifiedObject {
+    label: string;
+    mask: string;
+    score: number; // Assuming this is returned from the Hugging Face API
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    const [theFile, setTheFile] = useState<File | undefined>(undefined);
+    const [imagePreview, setImagePreview] = useState<string | undefined>(undefined);
+    const [isLoading, setIsLoading] = useState(false);
+    const [apiResponse, setApiResponse] = useState<IdentifiedObject[]>([]);
+    const [toShow, setToShow] = useState<IdentifiedObject | undefined>(undefined);
+    const [showCamera, setShowCamera] = useState(false);
+    const [highestAccuracyObject, setHighestAccuracyObject] = useState<string | undefined>(undefined);
+    const videoRef = useRef<HTMLVideoElement | null>(null);
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.currentTarget.files?.[0];
+        if (!file) return;
+
+        setTheFile(file);
+        const blobUrl = URL.createObjectURL(file);
+        setImagePreview(blobUrl);
+    };
+
+    const handleCapture = async () => {
+        if (canvasRef.current && videoRef.current) {
+            const canvas = canvasRef.current;
+            const video = videoRef.current;
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext("2d");
+            context?.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Convert canvas image to blob (file)
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    const file = new File([blob], "captured_image.png", { type: "image/png" });
+                    setTheFile(file);
+                    const blobUrl = URL.createObjectURL(file);
+                    setImagePreview(blobUrl);
+                }
+            });
+            setShowCamera(false);
+        }
+    };
+
+    const startCamera = async () => {
+        setShowCamera(true);
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                videoRef.current.play();
+            }
+        } catch (error) {
+            console.error("Error accessing camera:", error);
+        }
+    };
+
+    const identifyThings = async () => {
+        if (!theFile) return;
+
+        setIsLoading(true);
+        const formData = new FormData();
+        formData.set("theImage", theFile);
+
+        try {
+            const response = await fetch("/api", {
+                method: "POST",
+                body: formData,
+            });
+
+            if (response.ok) {
+                console.log("File uploaded successfully");
+                const theResponse = await response.json();
+                console.log(theResponse);
+                setApiResponse(theResponse.body);
+            } else {
+                console.error("Failed to upload file");
+            }
+        } catch (error) {
+            console.error("Error occurred during API call:", error);
+        }
+
+        setIsLoading(false);
+    };
+
+    function toggleThis(label: string) {
+        const showThis = apiResponse.find((obj) => obj.label === label);
+        setToShow((prev: IdentifiedObject | undefined) => {
+            if (prev === showThis) {
+                return undefined;
+            }
+            return showThis || undefined;
+        });
+    }
+
+    useEffect(() => {
+        if (apiResponse.length > 0) {
+            // Find the object with the highest confidence score
+            const highestScoreObject = apiResponse.reduce((maxObj, currentObj) =>
+                currentObj.score > maxObj.score ? currentObj : maxObj
+            );
+            setHighestAccuracyObject(highestScoreObject.label);
+        }
+    }, [apiResponse]);
+
+    return (
+        <main className="flex min-h-screen bg-gray-900 flex-col items-center justify-center py-8">
+            <h1 className="text-5xl font-bold text-white mb-8">AI-Dentifier</h1>
+
+            <div className="text-center text-gray-400 mb-6">
+                Using Facebook's DETR model to identify objects in your images.
+            </div>
+
+            {/* File Upload Button */}
+            <label className="relative cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md shadow-md transition">
+                <input
+                    type="file"
+                    className="absolute inset-0 opacity-0"
+                    onChange={handleFileChange}
+                    accept="image/*"
+                />
+                Choose a File
+            </label>
+
+            {/* Capture with Camera Button */}
+            <button
+                className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 mt-4 rounded-md shadow-md transition"
+                onClick={startCamera}
+            >
+                Capture with Camera
+            </button>
+
+            {/* Camera View */}
+            {showCamera && (
+                <div className="mt-6">
+                    <video ref={videoRef} className="w-80 h-80 bg-gray-800" />
+                    <button
+                        className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 mt-4 rounded-md shadow-lg transition"
+                        onClick={handleCapture}
+                    >
+                        Capture Image
+                    </button>
+                    <canvas ref={canvasRef} className="hidden" />
+                </div>
+            )}
+
+            {/* Image Preview */}
+            <div className="w-80 h-80 mt-8 relative rounded-lg overflow-hidden shadow-lg bg-gray-800 flex items-center justify-center">
+                {imagePreview ? (
+                    <img src={imagePreview} className="object-cover w-full h-full" />
+                ) : (
+                    <span className="text-gray-500">No image uploaded</span>
+                )}
+
+                {/* Display Masked Image */}
+                {toShow && (
+                    <img
+                        src={`data:image/png;base64,${toShow.mask}`}
+                        className="object-cover absolute z-10 mix-blend-screen invert"
+                    />
+                )}
+            </div>
+
+            {/* "Go" Button */}
+            {theFile && (
+                <button
+                    className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 mt-6 rounded-md shadow-lg transition disabled:bg-green-800"
+                    onClick={identifyThings}
+                    disabled={isLoading}
+                >
+                    {isLoading ? "Analyzing..." : "Go!"}
+                </button>
+            )}
+
+            {/* Identified Objects with Accuracy */}
+            {apiResponse.length > 0 && (
+                <div className="mt-10 w-full max-w-lg">
+                    <div className="text-white text-lg mb-4 text-center">Identified objects:</div>
+                    <div className="grid grid-cols-3 gap-4">
+                        {apiResponse.map((e) => (
+                            <button
+                                key={e.label}
+                                className={`px-4 py-2 rounded-md font-semibold text-white transition ${
+                                    toShow?.label === e.label
+                                        ? "bg-blue-600"
+                                        : "bg-gray-700 hover:bg-blue-500"
+                                }`}
+                                onClick={() => toggleThis(e.label)}
+                            >
+                                {e.label} - {Math.round(e.score * 100)}% {/* Display percentage */}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Final Message: Highest Accuracy Object */}
+            {highestAccuracyObject && (
+                <div className="text-white text-lg mt-6">
+                    The object detected is likely a <strong>{highestAccuracyObject}</strong>.
+                </div>
+            )}
+        </main>
+    );
 }
