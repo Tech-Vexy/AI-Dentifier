@@ -25,3 +25,19 @@ body {
     text-wrap: balance;
   }
 }
+/* Example CSS for responsive layout */
+@media (max-width: 600px) {
+  main {
+    padding: 10px;
+  }
+
+  .image-preview, .file-input, .results {
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  button {
+    width: 100%;
+    margin-bottom: 10px;
+  }
+}
