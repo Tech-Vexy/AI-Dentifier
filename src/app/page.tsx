@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 interface IdentifiedObject {
     label: string;
     mask: string;
-    score: number; // Assuming this is returned from the Hugging Face API
+    score: number;
 }
 
 export default function Home() {
@@ -15,6 +15,7 @@ export default function Home() {
     const [toShow, setToShow] = useState<IdentifiedObject | undefined>(undefined);
     const [showCamera, setShowCamera] = useState(false);
     const [highestAccuracyObject, setHighestAccuracyObject] = useState<string | undefined>(undefined);
+    const [isFrontCamera, setIsFrontCamera] = useState(true); // State to toggle between cameras
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -53,7 +54,20 @@ export default function Home() {
     const startCamera = async () => {
         setShowCamera(true);
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter((device) => device.kind === "videoinput");
+
+            const selectedDevice = videoDevices.find((device) =>
+                isFrontCamera ? device.label.toLowerCase().includes("front") : device.label.toLowerCase().includes("back")
+            );
+
+            const constraints = {
+                video: {
+                    deviceId: selectedDevice?.deviceId || undefined,
+                },
+            };
+
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
                 videoRef.current.play();
@@ -61,6 +75,11 @@ export default function Home() {
         } catch (error) {
             console.error("Error accessing camera:", error);
         }
+    };
+
+    const toggleCamera = () => {
+        setIsFrontCamera((prev) => !prev);
+        startCamera(); // Restart camera with the new device
     };
 
     const identifyThings = async () => {
@@ -77,9 +96,7 @@ export default function Home() {
             });
 
             if (response.ok) {
-                console.log("File uploaded successfully");
                 const theResponse = await response.json();
-                console.log(theResponse);
                 setApiResponse(theResponse.body);
             } else {
                 console.error("Failed to upload file");
@@ -93,17 +110,11 @@ export default function Home() {
 
     function toggleThis(label: string) {
         const showThis = apiResponse.find((obj) => obj.label === label);
-        setToShow((prev: IdentifiedObject | undefined) => {
-            if (prev === showThis) {
-                return undefined;
-            }
-            return showThis || undefined;
-        });
+        setToShow((prev) => (prev === showThis ? undefined : showThis));
     }
 
     useEffect(() => {
         if (apiResponse.length > 0) {
-            // Find the object with the highest confidence score
             const highestScoreObject = apiResponse.reduce((maxObj, currentObj) =>
                 currentObj.score > maxObj.score ? currentObj : maxObj
             );
@@ -115,11 +126,6 @@ export default function Home() {
         <main className="flex min-h-screen bg-gray-900 flex-col items-center justify-center py-8">
             <h1 className="text-5xl font-bold text-white mb-8">AI-Dentifier</h1>
 
-            <div className="text-center text-gray-400 mb-6">
-                Using Facebooks DETR model to identify objects in your images.
-            </div>
-
-            {/* File Upload Button */}
             <label className="relative cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md shadow-md transition">
                 <input
                     type="file"
@@ -130,7 +136,6 @@ export default function Home() {
                 Choose a File
             </label>
 
-            {/* Capture with Camera Button */}
             <button
                 className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 mt-4 rounded-md shadow-md transition"
                 onClick={startCamera}
@@ -138,7 +143,13 @@ export default function Home() {
                 Capture with Camera
             </button>
 
-            {/* Camera View */}
+            <button
+                className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 mt-4 rounded-md shadow-md transition"
+                onClick={toggleCamera}
+            >
+                Switch to {isFrontCamera ? "Rear" : "Front"} Camera
+            </button>
+
             {showCamera && (
                 <div className="mt-6">
                     <video ref={videoRef} className="w-80 h-80 bg-gray-800" />
@@ -152,7 +163,6 @@ export default function Home() {
                 </div>
             )}
 
-            {/* Image Preview */}
             <div className="w-80 h-80 mt-8 relative rounded-lg overflow-hidden shadow-lg bg-gray-800 flex items-center justify-center">
                 {imagePreview ? (
                     <img src={imagePreview} className="object-cover w-full h-full" />
@@ -160,7 +170,6 @@ export default function Home() {
                     <span className="text-gray-500">No image uploaded</span>
                 )}
 
-                {/* Display Masked Image */}
                 {toShow && (
                     <img
                         src={`data:image/png;base64,${toShow.mask}`}
@@ -169,7 +178,6 @@ export default function Home() {
                 )}
             </div>
 
-            {/* "Go" Button */}
             {theFile && (
                 <button
                     className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 mt-6 rounded-md shadow-lg transition disabled:bg-green-800"
@@ -180,7 +188,6 @@ export default function Home() {
                 </button>
             )}
 
-            {/* Identified Objects with Accuracy */}
             {apiResponse.length > 0 && (
                 <div className="mt-10 w-full max-w-lg">
                     <div className="text-white text-lg mb-4 text-center">Identified objects:</div>
@@ -189,20 +196,17 @@ export default function Home() {
                             <button
                                 key={e.label}
                                 className={`px-4 py-2 rounded-md font-semibold text-white transition ${
-                                    toShow?.label === e.label
-                                        ? "bg-blue-600"
-                                        : "bg-gray-700 hover:bg-blue-500"
+                                    toShow?.label === e.label ? "bg-blue-600" : "bg-gray-700 hover:bg-blue-500"
                                 }`}
                                 onClick={() => toggleThis(e.label)}
                             >
-                                {e.label} - {Math.round(e.score * 100)}% {/* Display percentage */}
+                                {e.label} - {Math.round(e.score * 100)}%
                             </button>
                         ))}
                     </div>
                 </div>
             )}
 
-            {/* Final Message: Highest Accuracy Object */}
             {highestAccuracyObject && (
                 <div className="text-white text-lg mt-6">
                     The object detected is likely a <strong>{highestAccuracyObject}</strong>.
